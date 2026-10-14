@@ -7,8 +7,8 @@ android {
         applicationId = "app.cutiepie.cutie_pie"
         minSdk = 24
         targetSdk = 36
-        versionCode = 37
-        versionName = "0.4.16"
+        versionCode = 38
+        versionName = "0.4.17"
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

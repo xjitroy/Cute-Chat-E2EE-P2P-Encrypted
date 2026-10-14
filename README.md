@@ -20,6 +20,22 @@ This non-debuggable APK retains the original **development signing certificate**
 
 বাংলা: পুরোনো অ্যাপের ভেতর থেকে package error এলে এই APK একবার Chrome/Downloads থেকে আগের অ্যাপের ওপর ইনস্টল করুন। আনইনস্টল বা data clear করবেন না। নতুন সংস্করণে পরের আপডেট Android-এর নিজস্ব installation session দিয়ে হবে। ফোনে বাস্তব ইনস্টল পরীক্ষা এখনও বাকি।
 
+## Automatic Send / Receive preparation
+
+Send prepares Bluetooth and sender Wi-Fi as needed; Receive requests modern Advertise permission and Android discoverability. After a verified sender is accepted, the receiver creates a temporary local hotspot. Its password travels only in the authenticated Signal-encrypted Bluetooth handoff, then the sender joins via Android’s public Wi-Fi API. No password typing for this supported path. Existing same-Wi-Fi links are reused.
+
+Android may require Bluetooth pairing/visibility or Wi-Fi connection consent; these prompts cannot be bypassed. The receiver does not enable station Wi-Fi and accidentally disable its hotspot. Older Android may need Location switched on for nearby setup; no GPS coordinates are read. Settings refusal/cancellation does not authorize setup. No active call/transfer network change, hidden toggles, process binding or guaranteed device compatibility. Temporary app-owned hotspot/network requests are released after idle/cancel, without forcibly disabling unrelated user radios.
+
+বাংলা: Send ফাইল বাছার পরে প্রয়োজনীয় Bluetooth/Wi-Fi setup করবে। Receive-এ sender-কে Accept করার পরে অস্থায়ী hotspot হবে; encrypted Bluetooth দিয়ে password যাবে এবং sender-এর Wi-Fi যুক্ত হবে। Android pairing/connection prompt অনুমোদন করতে হবে; manual password লাগবে না supported auto path-এ।
+
+## In-app installation repair
+
+0.4.17 stages the verified APK in an Android-owned PackageInstaller session instead of asking OEM installer Activities to read an app-private URI. Exact size/hash/current signer/archive checks and Android install-source/user-action consent remain mandatory. Callback receiver is private and session/token/expiry bound; background only offers a generic tap-to-confirm notification. No silent installation or protection bypass.
+
+**If an older in-app updater reports a package parsing error, download this APK using Chrome/Downloads and install it over the existing app once. Do not uninstall or clear app data.** The newly installed version handles subsequent updates through the repaired route. The exact OEM rejection has not been captured and actual phone installation is not yet verified. If Chrome also rejects it, obtain the exact Android error/version before diagnosing policy/signer/storage/compatibility.
+
+বাংলা: পুরোনো অ্যাপের ভেতর থেকে package error এলে এই APK একবার Chrome/Downloads থেকে আগের অ্যাপের ওপর ইনস্টল করুন। আনইনস্টল বা data clear করবেন না। নতুন সংস্করণে পরের আপডেট Android-এর নিজস্ব installation session দিয়ে হবে। ফোনে বাস্তব ইনস্টল পরীক্ষা এখনও বাকি।
+
 ## What changed
 
 - Local-only Wi-Fi/hotspot network changes are reported through the supported WebRTC monitor, including real Android handles and offline-Wi-Fi online state. The process's default network is not changed.
@@ -57,4 +73,4 @@ A local release build must be signed using your own secure build configuration. 
 
 Both flavors passed **208 JVM tests** with no failures; lint reported zero errors (Normal 125 / Assist 137 warnings). **24 Android instrumentation cases per flavor compiled, zero executed** for this candidate because no adb target was attached. Physical QR rotations, decoding, gestures, permissions, authentication, calls, background behavior and in-place updates still need real-device tests. See [VALIDATION.json](VALIDATION.json). Public downloads are separately hash-verified during publication.
 
-This is a clean product snapshot, with no private Git history, signing/service-account keys, user screenshots or build caches. APK SHA-256: `3875590ae2c19188cf2da4be2cef4fa3a8e74beba4690f342b1845baec9d4847`.
+This is a clean product snapshot, with no private Git history, signing/service-account keys, user screenshots or build caches. APK SHA-256: `cac78235fac549e98c8ad3066a78145aa8e9346e4161759b49c197e43b0d8fc1`.

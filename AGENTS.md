@@ -11,3 +11,5 @@ Read START_HERE.md and the owner's latest request. This public repository is a c
 - Record real tests separately from compilation/host tests; do not claim 100% security, universal connection, mathematically lossless video, Play approval or production certification.
 
 Installer repair uses public PackageInstaller sessions with original strict byte/archive/signer checks, Android user consent and non-exported session/token/expiry-bound callbacks. Never bypass Play Protect, install-source settings, app authentication or background launch limits. Old updater must bootstrap from browser once; actual OEM rejection is unproven.
+
+Nearby radio setup uses public SDK APIs with OS consent, receiver-only Advertise, real state/expiry/auth/no-call/no-transfer/destruction checks. Passwords stay in authenticated Bluetooth controls. Original user-confirmed installer repair is retained. Never bypass Play Protect, install-source settings, app authentication or background launch limits. Old updater must bootstrap from browser once; actual OEM rejection is unproven.

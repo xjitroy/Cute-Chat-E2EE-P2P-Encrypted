@@ -50,6 +50,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
     private val appUpdates by lazy { NativeAppUpdates(this,
         { visible && unlocked && owner.preferences.getBoolean("setup",false) && !calls.active && page!="lock" && !isInPictureInPictureModeCompat() },
         { contentHost }) }
+    private val nearbySetup by lazy { NativeNearbySetup(this, { visible && unlocked && !calls.active && (page=="sharing" || sharingRouteRequested) && !owner.quickBatchBusy && owner.largeTransfers.none { it.state !in setOf("done","failed") } }) }
     private var returnPage="home"
     private var returnPeer:String?=null
     private var returnSettings=""
@@ -327,7 +328,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         consumePickedMedia()
         consumeProfileSelection()
         if(page=="contacts") startQrPreview()
-        contentHost?.let { showSecurityArrival(it) };appUpdates.foreground()
+        contentHost?.let { showSecurityArrival(it) };appUpdates.foreground();nearbySetup.foreground()
     }
     override fun onWindowFocusChanged(hasFocus:Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -378,7 +379,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
             registerScreenCaptureCallback(mainExecutorCompat(), callback); captureRegistration = callback
         }
     }
-    override fun onDestroy() { resetTabGesture(false);appUpdates.close();qrScanner?.close();qrBitmap?.recycle();qrBitmap=null;qrProfileBitmap?.recycle();qrProfileBitmap=null;privateDialogs.toList().forEach { it.dismiss() }; privateDialogs.clear(); pendingDialogs.clear(); cancelRecording(); mediaIo.shutdownNow(); attachmentDraft?.fill(0); externalCache?.delete(); mediaCache?.delete(); owner.unobserve(observer); if (calls.onChanged === observer) calls.onChanged = null; handler.removeCallbacksAndMessages(null); releaseRenderers(); super.onDestroy() }
+    override fun onDestroy() { resetTabGesture(false);appUpdates.close();nearbySetup.close();qrScanner?.close();qrBitmap?.recycle();qrBitmap=null;qrProfileBitmap?.recycle();qrProfileBitmap=null;privateDialogs.toList().forEach { it.dismiss() }; privateDialogs.clear(); pendingDialogs.clear(); cancelRecording(); mediaIo.shutdownNow(); attachmentDraft?.fill(0); externalCache?.delete(); mediaCache?.delete(); owner.unobserve(observer); if (calls.onChanged === observer) calls.onChanged = null; handler.removeCallbacksAndMessages(null); releaseRenderers(); super.onDestroy() }
     private fun applyCapturePolicy() {
         val target = if (page == "call" && calls.active) calls.peer else if (page == "chat") peer else null
         if (visible && unlocked && limitedViewer == null && target != null && owner.preferences.getBoolean("capture.allow.$target", false)) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -731,13 +732,16 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         MaterialAlertDialogBuilder(this).setTitle(tr("Receive files","ফাইল গ্রহণ"))
             .setMessage(tr("Only local sharing needs nearby permissions. Your Cute Chat name and ID suffix identify you to nearby app users. Accept a sender to receive their files into Downloads/Cute Chat as readable copies outside the app. Other apps/backups may access saved files. Android may ask to enable Bluetooth or approve Wi-Fi/hotspot setup.","শুধু local sharing-এ কাছের ডিভাইসের permission লাগে। Cute Chat নাম ও ID-এর শেষ চার অঙ্ক দিয়ে app user আপনাকে চিনবেন। Sender-কে Accept করলে ফাইল Downloads/Cute Chat-এ অ্যাপের বাইরের readable copy হিসেবে সেভ হবে। অন্য app/backup সেভ করা ফাইল পড়তে পারে। Android Bluetooth চালু বা Wi-Fi/hotspot-এর অনুমতি চাইতে পারে।"))
             .setPositiveButton(tr("Continue","এগিয়ে যান")) { _,_->acceptedPrivateAction {
-                if(internetSharing()) enableQuickReceive() else localPermissions(true,true) { enableQuickReceive() }
+                if(internetSharing()) enableQuickReceive() else localPermissions(true,true,receiving=true) { enableQuickReceive() }
             } }.setNegativeButton(tr("Cancel","বাতিল"),null).secureShow()
     }
     private fun enableQuickReceive() {
         if(Build.VERSION.SDK_INT>=29) owner.quickShare.enableDownloads() else if(!owner.quickShare.enableSavedDestination()) { chooseQuickFolder();return }
         sharingPage()
-        if(!internetSharing() && owner.local.bluetooth) startActivityForResult(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(android.bluetooth.BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION,120),53)
+        if(!internetSharing() && owner.local.bluetooth) {
+            try { startActivityForResult(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(android.bluetooth.BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION,120),53) }
+            catch(_:Exception) { toast(tr("Allow Bluetooth visibility in Android to receive from a new nearby phone; same-Wi-Fi sharing remains available.","নতুন কাছের ফোন থেকে গ্রহণ করতে Android-এ Bluetooth visibility অনুমোদন করুন; একই Wi-Fi-তে sharing চলবে।")) }
+        }
     }
     private fun chooseQuickFolder() {
         startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),54)
@@ -752,7 +756,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         if(!visible || !unlocked || calls.active || quickFiles.isEmpty()) return
         if(quickConnecting && quickTarget!=target) { toast(tr("Cancel the current connection first","আগের সংযোগ আগে বাতিল করুন"));return }
         MaterialAlertDialogBuilder(this).setTitle(tr("Send selected files?","বেছে নেওয়া ফাইল পাঠাবেন?"))
-            .setMessage(sharingIdentity(target)+" · "+quickFiles.size+tr(" files. Original bytes are encrypted in transit, then saved outside the recipient's app. Bluetooth sets up Wi-Fi when needed; approve Android's connection prompt. Keep receiving enabled on the other phone.","টি ফাইল। মূল bytes encrypted ভাবে যাবে, তারপর প্রাপকের অ্যাপের বাইরে সেভ হবে। দরকার হলে Bluetooth Wi-Fi সংযোগ তৈরি করবে; Android prompt অনুমোদন করুন। অন্য ফোনে গ্রহণ চালু রাখুন।"))
+            .setMessage(sharingIdentity(target)+" · "+quickFiles.size+tr(" files. Original bytes are encrypted in transit, then saved outside the recipient's app. Bluetooth securely delivers the temporary hotspot password automatically; approve Android's connection prompt. Keep receiving enabled on the other phone.","টি ফাইল। মূল bytes encrypted ভাবে যাবে, তারপর প্রাপকের অ্যাপের বাইরে সেভ হবে। দরকার হলে Bluetooth Wi-Fi সংযোগ তৈরি করবে; Android prompt অনুমোদন করুন। অন্য ফোনে গ্রহণ চালু রাখুন।"))
             .setPositiveButton(tr("Send","পাঠান")) { _,_->acceptedPrivateAction { quickTarget=target;quickConnecting=false;quickBatchConfirmed=true;advanceQuickShare() } }
             .setNegativeButton(tr("Cancel","বাতিল"),null).secureShow()
     }
@@ -805,7 +809,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         }
         next()
     }
-    private fun localPermissions(wifi:Boolean,value:Boolean,after:(()->Unit)?=null) {
+    private fun localPermissions(wifi:Boolean,value:Boolean,receiving:Boolean=false,after:(()->Unit)?=null) {
         if(!visible || !unlocked) return
         val withWifi=if(wifi) value else owner.preferences.getBoolean("local.wifi",false)
         val withBluetooth=if(after!=null) getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter!=null else if(!wifi) value else owner.preferences.getBoolean("local.bluetooth",false)
@@ -814,16 +818,19 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         if(withWifi && Build.VERSION.SDK_INT>=33) needed.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         if(withWifi && Build.VERSION.SDK_INT>=37) needed.add("android.permission.ACCESS_LOCAL_NETWORK")
         if(withBluetooth) {
-            if(Build.VERSION.SDK_INT>=31) needed.addAll(listOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN))
+            if(Build.VERSION.SDK_INT>=31) {
+                needed.addAll(listOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN))
+                if(NearbySetupRules.receivingPermissions(Build.VERSION.SDK_INT,withBluetooth,receiving)) needed.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            }
             else needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
         val action=action@{ if(visible && unlocked && !calls.active) {
             val adapter=getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
             if(withBluetooth && adapter==null) { toast(tr("This device has no Bluetooth adapter","এই ডিভাইসে Bluetooth নেই"));sharingPage();return@action }
-            if(withBluetooth && adapter?.isEnabled!=true) {
-                localPermissionAction={ owner.localSettings(withWifi,withBluetooth);owner.work { handler.post { if(visible && unlocked) after?.invoke() } } }
-                startActivityForResult(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE),52)
-            } else { owner.localSettings(withWifi,withBluetooth);owner.work { handler.post { if(visible && unlocked) after?.invoke() } } }
+            nearbySetup.begin(withWifi,withBluetooth,receiving) {
+                owner.localSettings(withWifi,withBluetooth)
+                owner.work { handler.post { if(visible && unlocked && !calls.active) after?.invoke() } }
+            }
         } }
         val missing=needed.distinct().filter { checkSelfPermission(it)!=PackageManager.PERMISSION_GRANTED }.toMutableList()
         if(Build.VERSION.SDK_INT in 31..32 && Manifest.permission.ACCESS_FINE_LOCATION in missing) missing.add(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -2294,7 +2301,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         consumeProjection(); consumeProfileSelection()
         consumeCall()
         if (calls.active) callScreen() else if (pendingMedia != null) consumePickedMedia() else if(contactsHubRequested) { contactsHubRequested=false; phoneContacts() } else if(sharingRouteRequested) { sharingRouteRequested=false;sharingPage() } else if(page=="lock") restorePage()
-        drainPendingDialogs();appUpdates.foreground()
+        drainPendingDialogs();appUpdates.foreground();nearbySetup.foreground()
         handler.postDelayed({ if(visible && unlocked && page in setOf("home","people")) {
             if(!owner.preferences.getBoolean("backgroundSetupSeen",false)) { owner.preferences.edit().putBoolean("backgroundSetupSeen",true).apply();backgroundSetupGuide() }
             else askContactsPermission()
@@ -2604,6 +2611,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if(appUpdates.result(requestCode)) return
+        if(nearbySetup.result(requestCode)) return
         if (requestCode == 51) {
             val token = projectionCall; projectionCall = null
             if (resultCode == RESULT_OK && data != null && token != null && token == calls.id)
