@@ -25,7 +25,7 @@ jobs:
           tag='cute-chat-0.4.14'
           commit='1239f276251ab4a9dcbd5b18e54af628d473fe29'
           files=[{'name': 'CHECKSUMS.sha256', 'bytes': 589, 'sha256': '02d311b1b26b6777914f8c9058a4df73ecfbef629b3790ab279874f57caa2ef0'}, {'name': 'Cute-Chat-0.4.14-Source.zip', 'bytes': 1321116, 'sha256': 'c957e94284a468d479caae5ecfac572570e76be7ab7605168b8e5cd05ea81691'}, {'name': 'Cute-Chat-0.4.14-normal.apk', 'bytes': 79619600, 'sha256': '63f97628e6cceb6be8fed5c153df7ae265424166d059e674635614cee30b57e9'}, {'name': 'PRIVACY.md', 'bytes': 1347, 'sha256': 'c701a6edea7c09412936e7d272791dd92328b0aa949a584b5683b1947d476506'}, {'name': 'README.md', 'bytes': 5445, 'sha256': '10301c909c9747ba9425e8df8b01e82372f48b348b2fdddda4a517b75645e780'}, {'name': 'SECURITY.md', 'bytes': 1838, 'sha256': '2d5ace773ded3d97266260197979477a11621fd75f7d8380560810da62e33d96'}, {'name': 'VALIDATION.json', 'bytes': 1589, 'sha256': '2bcbe429ae77ed099dccbd8663b486e5687baa0068f6f8e6dff74a71b34796ff'}, {'name': 'cute-chat-update.json', 'bytes': 367, 'sha256': '5dd0553efae429bf793485570d53a9e98ce920de7091a37b546df90e9e9f4da2'}]
-          release=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/releases/tags/{tag}'],text=True))
+          release=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/releases/412405879'],text=True))
           assert release['draft'] is True and release['prerelease'] is False, 'Only the unpublished authorized draft may be populated'
           assert release['id']==412405879, 'Unexpected release'
           folder=Path('release-assets');folder.mkdir()
