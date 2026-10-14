@@ -12,9 +12,9 @@ object LocalSharingRules {
         val size=input.readInt(); require(size in 1..MAX_PACKET)
         return ByteArray(size).also { input.readFully(it) }
     }
-    fun write(output: DataOutputStream, bytes: ByteArray) {
+    fun write(output: DataOutputStream, bytes: ByteArray, flush: Boolean = true) {
         require(bytes.size in 1..MAX_PACKET)
-        output.writeInt(bytes.size); output.write(bytes); output.flush()
+        output.writeInt(bytes.size); output.write(bytes); if (flush) output.flush()
     }
     fun context(self:String,peer:String,nonce:String,remoteNonce:String,medium:String):String {
         ProtocolRules.hash(self);ProtocolRules.hash(peer);ProtocolRules.id(nonce);ProtocolRules.id(remoteNonce)

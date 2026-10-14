@@ -8,6 +8,15 @@ object VideoCompressionPolicy {
     enum class Adaptation { DETAIL, SMOOTH, BALANCED }
     fun mode(key: String?) = Mode.entries.firstOrNull { it.key == key } ?: Mode.DETAIL
     private fun name(codec: String) = codec.substringAfterLast('/').uppercase(Locale.ROOT)
+    /** Same-LAN peers often mix OEM hardware. Prefer interoperable baseline H264/VP8;
+     * keep the SDK's modern codecs and repair formats as compatible alternatives. */
+    fun localCodecRank(codec: String, parameters: Map<String, String>, fittedHardware: Set<String>): Int {
+        val c=name(codec)
+        val profile=parameters["profile-level-id"]
+        if(c=="H264" && (profile==null || profile.matches(Regex("(?i)42[0-9a-f]{4}")))) return 0
+        if(c=="VP8") return 1
+        return 2+codecRank(codec,parameters,fittedHardware)
+    }
     fun codecRank(codec: String, parameters: Map<String, String>, fittedHardware: Set<String>): Int {
         val c = name(codec)
         val high = parameters["profile-level-id"]?.matches(Regex("(?i)64[0-9a-f]{4}")) == true

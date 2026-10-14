@@ -4,6 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VideoCompressionPolicyTest {
+    @Test fun localMixedOemCallsPreferBaselineBeforeModernOrHighProfileVideo() {
+        val hw=setOf("H264","H265","VP9")
+        val baseline=VideoCompressionPolicy.localCodecRank("H264",mapOf("profile-level-id" to "42e01f"),hw)
+        assertEquals(0,baseline)
+        assertTrue(baseline<VideoCompressionPolicy.localCodecRank("H265",emptyMap(),hw))
+        assertTrue(VideoCompressionPolicy.localCodecRank("VP8",emptyMap(),hw)<VideoCompressionPolicy.localCodecRank("H264",mapOf("profile-level-id" to "640c1f"),hw))
+    }
+    @Test fun localFallbackStillRetainsModernCodecsAndTransportRepair() {
+        val offered=listOf("H265","VP9","rtx","red","ulpfec")
+        val ordered=offered.sortedBy { VideoCompressionPolicy.localCodecRank(it,emptyMap(),setOf("H265","VP9")) }
+        assertEquals(offered.toSet(),ordered.toSet());assertEquals("H265",ordered.first())
+        assertTrue(ordered.indexOf("rtx")>ordered.indexOf("VP9"))
+    }
     private val p=VideoQualityPolicy.defaults
     private fun rank(c:String,hw:Set<String>,profile:String="")=VideoCompressionPolicy.codecRank(c,mapOf("profile-level-id" to profile),hw)
     @Test fun efficientCodecNeedsFittedHardwareAndCompatibilityFallbackStaysAheadOfSoftwareAv1() {

@@ -9,7 +9,7 @@ import org.json.JSONObject
 object NativeExtensions {
     private const val PREFIX = "CCX1:"
     fun envelope(value: JSONObject): JSONObject = JSONObject().put("code", PREFIX + WireCodec.canonical(value)).also { parse(it) }
-    fun features(assist:Boolean = false) = envelope(JSONObject().put("type","features").put("features",JSONArray(listOf("delete","profile","call_ring","large_file","wifi_handoff","live_file") + if(assist) listOf("assist") else emptyList())))
+    fun features(assist:Boolean = false) = envelope(JSONObject().put("type","features").put("features",JSONArray(listOf("delete","profile","call_ring","large_file","wifi_handoff","live_file","wifi_band") + if(assist) listOf("assist") else emptyList())))
     fun parse(data: JSONObject): JSONObject? {
         val code = data.getString("code")
         if (!code.startsWith(PREFIX)) return null

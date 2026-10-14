@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "package_name": "app.cutiepie.cutie_pie",
-  "version_code": 35,
-  "version_name": "0.4.14",
-  "tag": "cute-chat-0.4.14",
+  "version_code": 36,
+  "version_name": "0.4.15",
+  "tag": "cute-chat-0.4.15",
   "min_sdk": 24,
   "apks": [
     {
       "variant": "normal",
-      "name": "Cute-Chat-0.4.14-normal.apk",
-      "bytes": 79619600,
-      "sha256": "63f97628e6cceb6be8fed5c153df7ae265424166d059e674635614cee30b57e9"
+      "name": "Cute-Chat-0.4.15-normal.apk",
+      "bytes": 79635984,
+      "sha256": "aaa501c672b3b3c50e9f0e7aba7ac8c91d9a13aa9c9447e7ff235f3e1e70f9db"
     }
   ]
 }

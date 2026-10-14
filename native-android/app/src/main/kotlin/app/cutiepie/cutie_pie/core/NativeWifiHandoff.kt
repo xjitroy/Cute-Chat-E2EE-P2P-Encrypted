@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 class NativeWifiHandoff(private val context:Context,private val owner:ScheduledExecutorService,
     private val local:NativeLocalSharing,private val bluetooth:(String)->Boolean,
     private val wifi:(String)->Boolean,private val consent:()->Boolean,private val busy:()->Boolean,
-    private val send:(String,JSONObject)->Unit,private val changed:()->Unit) {
+    private val send:(String,JSONObject)->Unit,private val changed:()->Unit,private val modern:(String)->Boolean={ false }) {
     data class Offer(val peer:String,val id:String)
     @Volatile var offer:Offer?=null;private set
     @Volatile var status="";private set
@@ -36,7 +36,9 @@ class NativeWifiHandoff(private val context:Context,private val owner:ScheduledE
         check(gate==null) { "Finish or cancel the current nearby connection" }
         val entry=WifiHandoffRules.Gate(peer,WireCodec.id(),false,SystemClock.elapsedRealtime())
         gate=entry;setupPending=true;local.holdForHandoff=true;touched=entry.began;status="Waiting for the recipient to allow a local hotspot"
-        send(peer,JSONObject().put("type","handoff_request").put("id",entry.id).put("expiresAt",System.currentTimeMillis()+WifiHandoffRules.SETUP_MS));changed()
+        val request=JSONObject().put("type","handoff_request").put("id",entry.id).put("expiresAt",System.currentTimeMillis()+WifiHandoffRules.SETUP_MS)
+        if(modern(peer)) request.put("band5",context.applicationContext.getSystemService(WifiManager::class.java).is5GHzBandSupported)
+        send(peer,request);changed()
     }
     fun control(peer:String,v:JSONObject) {
         if(!bluetooth(peer)) return
@@ -47,7 +49,7 @@ class NativeWifiHandoff(private val context:Context,private val owner:ScheduledE
                 if(!WifiHandoffRules.fresh(v.getLong("expiresAt"),System.currentTimeMillis()) || !consent() || busy() || gate!=null || Build.VERSION.SDK_INT<26) {
                     send(peer,JSONObject().put("type","handoff_abort").put("id",id));return
                 }
-                val e=WifiHandoffRules.Gate(peer,id,true,SystemClock.elapsedRealtime());gate=e;setupPending=false;touched=e.began
+                val e=WifiHandoffRules.Gate(peer,id,true,SystemClock.elapsedRealtime(),modern(peer) && v.optBoolean("band5"));gate=e;setupPending=false;touched=e.began
                 offer=Offer(peer,id);status="Nearby file request · allow a temporary local hotspot?";changed()
             }
             "handoff_wifi" -> {
@@ -69,18 +71,37 @@ class NativeWifiHandoff(private val context:Context,private val owner:ScheduledE
         offer=null;setupPending=true;local.holdForHandoff=true;status="Starting a temporary local hotspot";changed()
         if(!local.wifi) local.start(true,local.bluetooth)
         beforeHost=local.addresses().map { it.substringBefore(':') }.toSet()
-        try {
-            context.applicationContext.getSystemService(WifiManager::class.java).startLocalOnlyHotspot(object:WifiManager.LocalOnlyHotspotCallback() {
+        val manager=context.applicationContext.getSystemService(WifiManager::class.java)
+        var fallback=false
+        fun startHotspot(preferFast:Boolean) {
+            if(gate!==e || e.phase!="hosting") return
+            val cb=object:WifiManager.LocalOnlyHotspotCallback() {
                 override fun onStarted(value:WifiManager.LocalOnlyHotspotReservation) { owner.execute {
                     if(gate!==e || e.phase!="hosting") { release(value);return@execute }
                     reservation=value
-                    if(Build.VERSION.SDK_INT<26) { release(value);return@execute }
                     runCatching { advertise(e,value,0) }.onFailure { stop(true,"Hotspot unavailable; connect both phones to the same Wi-Fi") }
                 } }
-                override fun onFailed(reason:Int) { owner.execute { if(gate===e) stop(true,"Android could not start the hotspot ($reason); use the same Wi-Fi") } }
+                override fun onFailed(reason:Int) { owner.execute {
+                    if(gate!==e || e.phase!="hosting") return@execute
+                    if(preferFast && !fallback) { fallback=true;status="5GHz unavailable here · using Android's compatible hotspot";changed();startHotspot(false) }
+                    else stop(true,"Android could not start the hotspot ($reason); use the same Wi-Fi")
+                } }
                 override fun onStopped() { owner.execute { if(gate===e) stop(true,"Local hotspot stopped") } }
-            },main)
-        } catch(_:Exception) { stop(true,"Allow nearby/location permission and enable Wi-Fi; or use the same network") }
+            }
+            try {
+                if(preferFast && Build.VERSION.SDK_INT>=36) {
+                    // Only the public API is used; Android generates the SSID and secured credentials.
+                    val configuration=SoftApConfiguration.Builder().setChannels(android.util.SparseIntArray().apply {
+                        put(SoftApConfiguration.BAND_5GHZ,0)
+                    }).build()
+                    manager.startLocalOnlyHotspotWithConfiguration(configuration,java.util.concurrent.Executor { task -> owner.execute(task) },cb)
+                } else manager.startLocalOnlyHotspot(cb,main)
+            } catch(_:Exception) {
+                if(preferFast && !fallback) { fallback=true;startHotspot(false) }
+                else stop(true,"Allow nearby/location permission and enable Wi-Fi; or use the same network")
+            }
+        }
+        startHotspot(WifiHandoffRules.fastBand(Build.VERSION.SDK_INT,manager.is5GHzBandSupported,e.prefer5GHz))
     }
     @androidx.annotation.RequiresApi(26)
     @Suppress("DEPRECATION") private fun advertise(e:WifiHandoffRules.Gate,value:WifiManager.LocalOnlyHotspotReservation,attempt:Int) {

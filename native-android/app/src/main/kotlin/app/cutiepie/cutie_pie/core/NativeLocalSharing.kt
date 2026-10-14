@@ -207,6 +207,10 @@ class NativeLocalSharing(private val context:Context,private val owner:Scheduled
         if(sockets.size>=16) { resource.close();return }
         val link=LocalStreamLink(medium,id,input,output,resource,owner,packet) { closed -> sockets.remove(closed);ended(closed);changed() }
         if(medium=="wifi" && resource is Socket) {
+            // Apply to accepted sockets too: short control headers must not trigger delayed-ACK stalls.
+            resource.tcpNoDelay=true;resource.keepAlive=true
+            runCatching { resource.sendBufferSize=FileTransferTuning.SOCKET_BUFFER }
+            runCatching { resource.receiveBufferSize=FileTransferTuning.SOCKET_BUFFER }
             val connectivity=context.getSystemService(android.net.ConnectivityManager::class.java)
             link.unmanagedNetwork=connectivity.allNetworks.none { network -> connectivity.getLinkProperties(network)?.linkAddresses?.any { it.address.address.contentEquals(resource.localAddress.address) }==true }
         }

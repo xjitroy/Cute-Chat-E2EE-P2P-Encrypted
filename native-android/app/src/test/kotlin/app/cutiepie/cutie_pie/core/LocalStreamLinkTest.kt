@@ -7,6 +7,29 @@ import java.net.*
 import java.util.concurrent.*
 
 class LocalStreamLinkTest {
+    @Test fun bulkPipelinePreservesSixteenMiBAndInterleavedChatWithoutPerRecordOwnerCallbacks() {
+        val owner=Executors.newSingleThreadScheduledExecutor();val server=ServerSocket(0,1,InetAddress.getLoopbackAddress())
+        val aSocket=Socket(InetAddress.getLoopbackAddress(),server.localPort);val bSocket=server.accept();server.close()
+        aSocket.tcpNoDelay=true;bSocket.tcpNoDelay=true
+        val invites=CountDownLatch(2);val records=CountDownLatch(512);val chat=CountDownLatch(1)
+        val id=WireCodec.id();val cipher=ByteArray(32785) { (it%239).toByte() };val callbacks=java.util.concurrent.atomic.AtomicInteger()
+        val sent=java.security.MessageDigest.getInstance("SHA-256");val received=java.security.MessageDigest.getInstance("SHA-256")
+        fun link(socket:Socket)=LocalStreamLink("wifi","synthetic-bulk",socket.getInputStream(),socket.getOutputStream(),socket,owner,
+            { source,value -> if(value.getString("type")=="invite") invites.countDown() else source.receiveFrame(value.getString("frame")) },{})
+        val a=link(aSocket);val b=link(bSocket)
+        try {
+            owner.submit { a.begin("A");b.begin("B") }.get(5,TimeUnit.SECONDS);assertTrue(invites.await(5,TimeUnit.SECONDS))
+            owner.submit {
+                for(pipe in listOf(a,b)) { pipe.bind(LocalSharingRules.request(a.nonce,b.nonce),{}, { assertEquals("chat during bulk",it);chat.countDown() },{callbacks.incrementAndGet()},{});pipe.start() }
+                b.onBinary={ actual,bytes -> assertEquals(id,actual);received.update(bytes);records.countDown() }
+            }.get(5,TimeUnit.SECONDS)
+            repeat(512) { i -> sent.update(cipher);assertTrue(a.sendBinary(id,cipher) {true})
+                if(i==128) owner.submit { assertTrue(a.send("chat during bulk",true)) }.get(5,TimeUnit.SECONDS) }
+            assertTrue(records.await(15,TimeUnit.SECONDS));assertTrue(chat.await(5,TimeUnit.SECONDS))
+            assertArrayEquals(sent.digest(),received.digest())
+            assertTrue("Bulk callbacks coalesced rather than one per record",callbacks.get()<512)
+        } finally { a.close();b.close();owner.shutdownNow();aSocket.close();bSocket.close() }
+    }
     @Test fun boundedBinaryRecordsAndUrgentChatCrossRealSocketsWithoutJsonOrBase64Inflation() {
         val owner=Executors.newSingleThreadScheduledExecutor();val server=ServerSocket(0,1,InetAddress.getLoopbackAddress())
         val leftSocket=Socket(InetAddress.getLoopbackAddress(),server.localPort);val rightSocket=server.accept();server.close()

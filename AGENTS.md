@@ -1,6 +1,6 @@
 # Cute Chat product source instructions
 
-Read START_HERE.md and the owner's latest request. This public repository is a clean product snapshot, not the private development repository; do not import private history/artifacts/secrets. Existing publication is authorized for 0.4.14 Normal only. Future releases or production backend changes require the task owner's applicable authorization.
+Read START_HERE.md and the owner's latest request. This public repository is a clean product snapshot, not the private development repository; do not import private history/artifacts/secrets. Existing publication is authorized for 0.4.15 Normal only. Future releases or production backend changes require the task owner's applicable authorization.
 
 - Preserve the existing package, signing compatibility, single crypto/network owner, vault and transactional Signal state. Never roll ratchets back or reset user storage to fix a test.
 - Use standard maintained cryptographic libraries; no novel cryptography or chat/file/media application-server relay. Contact invitations are not encryption keys.

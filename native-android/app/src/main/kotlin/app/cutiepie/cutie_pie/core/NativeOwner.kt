@@ -243,7 +243,8 @@ class NativeOwner(private val context: Context) {
         { p -> channels[p]?.medium=="wifi" && p in authenticated },
         { foreground && viewUnlocked && quickShare.enabled && reservedCallPeer==null },
         { callActiveForSharing() || largeTransfers.any { it.state !in setOf("done","failed") } },
-        { p,value -> sendControl(p,"consent_request",NativeExtensions.envelope(value)) },::changed) }
+        { p,value -> sendControl(p,"consent_request",NativeExtensions.envelope(value)) },::changed,
+        { p -> engine?.supports(p,"wifi_band")==true }) }
     fun quickConnect(peer:String)=work { check(foreground && viewUnlocked && reservedCallPeer==null);wifiHandoff.begin(peer) }
     fun quickHandoffAccept(id:String,allow:Boolean)=work { check(foreground && viewUnlocked);wifiHandoff.accept(id,allow) }
     fun quickHandoffStop()=work {
@@ -342,6 +343,7 @@ class NativeOwner(private val context: Context) {
         try {
             val loaded = NativeIdentity.loadExisting(opened)
             PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context.applicationContext).createInitializationOptions())
+            app.cutiepie.cutie_pie.NativeRtcNetworks.install()
             factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
             vault = opened; identity = loaded; localUid = loaded.uid; engine = NativeChatEngine(opened, loaded.public)
             privateLibrary = PrivateLibrary(opened).also { it.recoverInterrupted(System.currentTimeMillis()) }

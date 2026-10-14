@@ -40,7 +40,7 @@ class LocalStreamLink(
         deadline=owner.schedule({ if(!ready) close() },120,TimeUnit.SECONDS)
         check(offer(JSONObject().put("type","invite").put("code",invitation).put("nonce",nonce),true))
         Thread({
-            try { val stream=DataInputStream(input)
+            try { val stream=DataInputStream(if(medium=="wifi") BufferedInputStream(input,FileTransferTuning.STREAM_BUFFER) else input)
                 while(!closed.get()) {
                     readPending.acquire()
                     val bytes=try { LocalSharingRules.read(stream) } catch(t:Throwable) { readPending.release();throw t }
@@ -58,15 +58,28 @@ class LocalStreamLink(
             } catch(_:Exception) { close() }
         },"CuteLocalRead").apply { isDaemon=true;start() }
         Thread({
-            try { val stream=DataOutputStream(output)
+            try { val stream=DataOutputStream(if(medium=="wifi") BufferedOutputStream(output,FileTransferTuning.STREAM_BUFFER) else output)
+                var batch=0;var writableAt=0L
                 while(!closed.get()) {
                     val bytes=synchronized(lock) {
                         while(!closed.get() && control.isEmpty() && audio.isEmpty() && data.isEmpty()) lock.wait()
                         if(closed.get()) null else (if(control.isNotEmpty()) control else if(audio.isNotEmpty()) audio else data).removeFirst().also { queued-=it.size;lock.notifyAll() }
                     } ?: break
                     writingAt=System.nanoTime()
-                    try { LocalSharingRules.write(stream,bytes) } finally { writingAt=0;bytes.fill(0) }
-                    if(writablePending.compareAndSet(false,true)) owner.execute { try { if(ready && !closed.get()) onWritable() } finally { writablePending.set(false) } }
+                    val binary=bytes[0]==0.toByte()
+                    val drained=synchronized(lock) { control.isEmpty() && audio.isEmpty() && data.isEmpty() }
+                    try {
+                        // Combine length/payload writes, retain bounded batches and immediate controls.
+                        batch+=bytes.size+4
+                        val flush=medium!="wifi" || !binary || drained || batch>=FileTransferTuning.FLUSH_BATCH
+                        LocalSharingRules.write(stream,bytes,flush)
+                        if(flush) batch=0
+                    } finally { writingAt=0;bytes.fill(0) }
+                    val now=System.nanoTime()
+                    if((!binary || drained || now-writableAt>=16_000_000L) && writablePending.compareAndSet(false,true)) {
+                        writableAt=now
+                        owner.execute { try { if(ready && !closed.get()) onWritable() } finally { writablePending.set(false) } }
+                    }
                 }
             } catch(_:Exception) { close() }
         },"CuteLocalWrite").apply { isDaemon=true;start() }
@@ -75,7 +88,7 @@ class LocalStreamLink(
         if(closed.get()) return false
         val bytes=WireCodec.canonical(value).toByteArray(Charsets.UTF_8);require(bytes.size<=LocalSharingRules.MAX_PACKET)
         return synchronized(lock) {
-            if(closed.get() || queued+bytes.size>(if(medium=="bluetooth") 64 else 256)*1024 || (metadata && control.size>=8) || (live && audio.size>=2)) { bytes.fill(0);false }
+            if(closed.get() || queued+bytes.size>(if(medium=="bluetooth") 64*1024 else FileTransferTuning.WIFI_QUEUE+FileTransferTuning.CONTROL_RESERVE) || (metadata && control.size>=8) || (live && audio.size>=2)) { bytes.fill(0);false }
             else { (if(metadata) control else if(live) audio else data).add(bytes);queued+=bytes.size;lock.notifyAll();true }
         }
     }
@@ -86,8 +99,8 @@ class LocalStreamLink(
         val bytes=ByteArray(25+cipher.size);WireCodec.key(id,24).copyInto(bytes,1);cipher.copyInto(bytes,25)
         val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(30)
         return synchronized(lock) {
-            while(ready && !closed.get() && alive() && queued+bytes.size>192*1024 && System.nanoTime()<deadline) lock.wait(100)
-            if(!ready || closed.get() || medium!="wifi" || !alive() || queued+bytes.size>192*1024) { bytes.fill(0);false }
+            while(ready && !closed.get() && alive() && queued+bytes.size>FileTransferTuning.WIFI_QUEUE && System.nanoTime()<deadline) lock.wait(100)
+            if(!ready || closed.get() || medium!="wifi" || !alive() || queued+bytes.size>FileTransferTuning.WIFI_QUEUE) { bytes.fill(0);false }
             else { data.add(bytes);queued+=bytes.size;lock.notifyAll();true }
         }
     }

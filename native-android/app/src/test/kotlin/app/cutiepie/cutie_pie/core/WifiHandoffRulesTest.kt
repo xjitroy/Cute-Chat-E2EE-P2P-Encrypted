@@ -4,6 +4,27 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 class WifiHandoffRulesTest {
+    @Test fun optionalBandCapabilityIsStrictAndLegacyRequestsRemainValid() {
+        val request=JSONObject().put("type","handoff_request").put("id",WireCodec.id()).put("expiresAt",1234)
+        WifiHandoffRules.validate(request)
+        WifiHandoffRules.validate(JSONObject(request.toString()).put("band5",true))
+        for(bad in listOf("yes",1,JSONObject.NULL)) {
+            try { WifiHandoffRules.validate(JSONObject(request.toString()).put("band5",bad));fail("Nonboolean band accepted") } catch(_:Exception) { }
+        }
+    }
+    @Test fun fiveGhzNeedsBothDeviceCapabilitiesAndThePublicConfigurationApi() {
+        assertTrue(WifiHandoffRules.fastBand(36,true,true))
+        assertFalse(WifiHandoffRules.fastBand(35,true,true))
+        assertFalse(WifiHandoffRules.fastBand(36,false,true))
+        assertFalse(WifiHandoffRules.fastBand(36,true,false))
+    }
+    @Test fun newBandFeatureFitsBothExistingNormalAndAssistFeatureEnvelopes() {
+        for(assist in listOf(false,true)) {
+            val feature=NativeExtensions.parse(NativeExtensions.features(assist))!!.getJSONArray("features")
+            assertTrue(feature.length()<=8)
+            assertTrue((0 until feature.length()).any { feature.getString(it)=="wifi_band" })
+        }
+    }
     private fun config()=JSONObject().put("type","handoff_wifi").put("id",WireCodec.id()).put("ssid","AndroidShare").put("password","12345678").put("security","wpa2").put("port",54321).put("hosts",JSONArray(listOf("192.168.43.1")))
     @Test fun boundedSecureCredentialsRejectOpenNetworksAndUnexpectedFields() {
         WifiHandoffRules.validate(config())

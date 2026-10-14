@@ -142,6 +142,8 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
     private var sharingList:LinearLayout?=null
     private var sharingStatus:TextView?=null
     private var sharingSnapshot=""
+    private var sharingSteps:SharingStepsView?=null
+    private val sharingProgress=mutableMapOf<String,Triple<TextView,TextView,ProgressBar>>()
     private var localPermissionAction:(()->Unit)?=null
     private val multipleMediaPicker=registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(LocalSharingRules.MAX_SELECTION)) { uris ->
         val target=pickingPeer;pickingPeer=null
@@ -694,7 +696,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
     private fun sharingPage() {
         sharingRouteRequested=false
         owner.preferences.edit().putBoolean("local.seen",true).apply()
-        page="sharing";peer=null;owner.foregroundPeer(null);sharingSnapshot=""
+        page="sharing";peer=null;owner.foregroundPeer(null);sharingSnapshot="";sharingProgress.clear()
         val layout=base(tr("File sharing","ফাইল শেয়ারিং","फ़ाइल साझा करें","Обмен файлами"))
         layout.addView(label(tr("Original files · live P2P · E2EE","মূল ফাইল · live P2P · E2EE","मूल फ़ाइलें · लाइव P2P · E2EE","Оригиналы · прямой поток · E2EE"),13f).apply { setTextColor(subtle) })
         layout.addView(MaterialSwitch(this).apply {
@@ -706,10 +708,13 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         })
         val content=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         layout.addView(ScrollView(this).apply { addView(content) },LinearLayout.LayoutParams(-1,0,1f))
+        sharingSteps=SharingStepsView(this,listOf(tr("Choose","বাছুন","चुनें","Выбор"),tr("Connect","সংযোগ","जोड़ें","Связь"),tr("Transfer","পাঠান","भेजें","Передача"),tr("Saved","সেভ","सहेजा","Готово")),purple,ink)
+        content.addView(sharingSteps,LinearLayout.LayoutParams(-1,dp(88)))
         val actions=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
-        actions.addView(SlideSharingAction(this,tr("Send","পাঠান","भेजें","Отправить"),tr("Slide up · choose files","উপরে slide করুন · ফাইল বাছুন","ऊपर खिसकाएँ · फ़ाइल चुनें","Сдвиньте вверх · выберите файлы"),-1,purple,container,ink) { quickFilePicker() }.apply { tag="quick-send" },LinearLayout.LayoutParams(-1,dp(140)))
-        actions.addView(SlideSharingAction(this,if(owner.quickShare.enabled) tr("Stop receiving","গ্রহণ বন্ধ","प्राप्त करना बंद करें","Остановить приём") else tr("Receive","গ্রহণ","प्राप्त करें","Получить"),tr("Slide down · accept a sender","নিচে slide করুন · sender গ্রহণ করুন","नीचे खिसकाएँ · भेजने वाले को स्वीकारें","Сдвиньте вниз · примите отправителя"),1,purple,container,ink) { quickReceive() }.apply { tag="quick-receive" },LinearLayout.LayoutParams(-1,dp(140)).apply { topMargin=dp(12) })
+        actions.addView(SlideSharingAction(this,if(internetSharing()) tr("Send","পাঠান","भेजें","Отправить") else tr("Send · Wi-Fi","পাঠান · Wi-Fi","भेजें · Wi-Fi","Отправить · Wi-Fi"),tr("Slide up or tap · choose files","উপরে slide বা tap · ফাইল বাছুন","ऊपर खिसकाएँ या टैप · फ़ाइल चुनें","Сдвиньте или нажмите · файлы"),-1,purple,container,ink) { quickFilePicker() }.apply { tag="quick-send" },LinearLayout.LayoutParams(-1,dp(140)))
+        actions.addView(SlideSharingAction(this,if(owner.quickShare.enabled) tr("Stop receiving","গ্রহণ বন্ধ","प्राप्त करना बंद करें","Остановить приём") else if(internetSharing()) tr("Receive","গ্রহণ","प्राप्त करें","Получить") else tr("Receive · Hotspot","গ্রহণ · Hotspot","प्राप्त · Hotspot","Приём · Hotspot"),tr("Slide down · accept a sender","নিচে slide করুন · sender গ্রহণ করুন","नीचे खिसकाएँ · भेजने वाले को स्वीकारें","Сдвиньте вниз · примите отправителя"),1,purple,container,ink) { quickReceive() }.apply { tag="quick-receive" },LinearLayout.LayoutParams(-1,dp(140)).apply { topMargin=dp(12) })
         content.addView(actions)
+        if(!internetSharing()) content.addView(card(label(tr("1  Receiver: tap Receive and accept the sender.\n2  Sender: choose files, then the receiver’s Cute Chat name.\n3  Automatic setup: receiver creates a hotspot, sender joins its Wi-Fi. If both phones already share Wi-Fi/hotspot, reuse it. If Android cannot set up automatically, turn on the receiver’s hotspot and connect the sender in Wi-Fi settings, then return here. Approve Android prompts; verified originals save to Downloads/Cute Chat.","১  প্রাপক: Receive ট্যাপ করে sender গ্রহণ করুন।\n২  প্রেরক: ফাইল বেছে প্রাপকের Cute Chat নাম বাছুন।\n৩  অটো setup: প্রাপক hotspot তৈরি করবেন, প্রেরক Wi-Fi-তে যোগ দেবেন। আগে থেকেই একই Wi-Fi/hotspot-এ থাকলে সেটিই চলবে। Android অটো setup না দিলে প্রাপকের hotspot চালু করে প্রেরকের Wi-Fi settings থেকে যুক্ত করুন, তারপর এখানে ফিরুন। Android prompt অনুমোদনের পরে যাচাই করা মূল ফাইল Downloads/Cute Chat-এ যাবে।"),13f).apply { setPadding(dp(16),dp(14),dp(16),dp(14)) }))
         content.addView(label(if(internetSharing()) tr("Both phones need a live connection. Unlimited 5G or fast Wi-Fi is recommended for large files. Upload and download run together; speed adapts to the real connection without blocking chats or calls.","দুই ফোনের live connection দরকার। বড় ফাইলে unlimited 5G বা দ্রুত Wi-Fi recommended। Upload ও download একসঙ্গে হবে; আসল connection অনুযায়ী গতি বদলাবে, chat/call আটকে দেবে না।") else tr("No Internet needed on the same Wi-Fi/hotspot. 5 GHz Wi-Fi is recommended when both phones support it; Android chooses an available band. Bluetooth discovers Cute Chat users and requests a Wi-Fi handoff with Android permission. Your app name and ID suffix are visible to nearby app users while local sharing is enabled.","একই Wi-Fi/hotspot-এ Internet লাগে না। দুই ফোন support করলে 5 GHz Wi-Fi recommended; Android উপযুক্ত band বাছবে। Bluetooth Cute Chat user খুঁজে Android অনুমতি নিয়ে Wi-Fi handoff করবে। Local sharing চালু থাকলে আপনার app নাম ও ID-এর শেষ চার অঙ্ক কাছের app user দেখবেন।"),13f).apply { setTextColor(subtle) })
         content.addView(label(tr("Received files save automatically in Downloads/Cute Chat.","পাওয়া ফাইল Downloads/Cute Chat-এ অটোমেটিক সেভ হবে।"),12f).apply { setTextColor(subtle) })
         if(quickFiles.isNotEmpty()) {
@@ -843,10 +848,12 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
     private fun updateSharing() {
         if(page!="sharing") return
         advanceQuickShare()
-        val model=owner.quickShare.enabled.toString()+quickFiles.toString()+quickTarget+owner.wifiHandoff.offer.toString()+owner.wifiHandoff.status+owner.localRequests.toString()+owner.local.devices.toString()+owner.connected.toString()+owner.receivingPeers.toString()+owner.quickBatchBusy+owner.transports.toString()+owner.largeTransfers.toString()
+        val model=owner.quickShare.enabled.toString()+quickFiles.toString()+quickTarget+owner.wifiHandoff.offer.toString()+owner.wifiHandoff.status+owner.localRequests.toString()+owner.local.devices.toString()+owner.connected.toString()+owner.receivingPeers.toString()+owner.quickBatchBusy+owner.transports.toString()+owner.largeTransfers.map { listOf(it.id,it.peer,it.name,it.size,it.state,it.outgoing,it.quick,it.paused,it.locallyPaused,it.medium) }.toString()
         sharingStatus?.text=owner.wifiHandoff.status.ifBlank { if(owner.quickShare.enabled) tr("Ready to receive · waiting for a sender","গ্রহণের জন্য প্রস্তুত · sender-এর অপেক্ষা") else if(quickFiles.isNotEmpty()) tr("Finding nearby phones…","কাছের ফোন খোঁজা হচ্ছে…") else if(owner.quickBatchBusy) tr("Preparing/transferring selected files · background sharing active","নির্বাচিত file প্রস্তুত/transfer চলছে · background sharing চালু") else tr("Choose Send or Receive","Send অথবা Receive বাছুন") }
+        sharingSteps?.setStage(when { owner.quickBatchBusy || owner.largeTransfers.any { it.state in setOf("sending","receiving","confirming") } -> 2;quickFiles.isNotEmpty() || owner.wifiHandoff.setupPending || owner.wifiHandoff.offer!=null || owner.localRequests.isNotEmpty() || owner.largeTransfers.any { it.state=="offered" } -> 1;owner.largeTransfers.any { it.state=="done" } -> 3;owner.quickShare.enabled -> 1;else -> 0 })
+        refreshSharingProgress()
         if(model==sharingSnapshot) return
-        sharingSnapshot=model;val list=sharingList ?: return;list.removeAllViews()
+        sharingSnapshot=model;val list=sharingList ?: return;list.removeAllViews();sharingProgress.clear()
         if(owner.quickBatchBusy) list.addView(button(tr("Cancel selected batch","নির্বাচিত batch বাতিল")) { acceptedPrivateAction { owner.cancelQuickBatch() } })
         owner.wifiHandoff.offer?.let { request ->
             val person=sharingIdentity(request.peer)
@@ -864,14 +871,12 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         for(transfer in owner.largeTransfers) {
             val row=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(12),dp(16),dp(12)) }
             val name=sharingIdentity(transfer.peer)
-            row.addView(label(name+" · "+transfer.name,16f));val percent=if(transfer.size==0L) if(transfer.state=="done") 100 else 0 else (transfer.bytes*100/transfer.size).toInt().coerceIn(0,if(transfer.state=="done") 100 else 99)
-            val state=if(transfer.paused) tr("Paused","বিরতি") else when(transfer.state) {
-                "offered"->tr("Waiting for acceptance","গ্রহণের অপেক্ষা");"sending"->tr("Sending live","সরাসরি পাঠাচ্ছে");"receiving"->tr("Receiving live","সরাসরি আসছে");"confirming"->tr("Verifying completion","শেষ যাচাই চলছে");"done"->tr("Saved · verified","সেভ হয়েছে · যাচাই সম্পূর্ণ");"failed"->tr("Stopped · select again to retry","থেমেছে · retry করতে আবার বাছুন");else->tr("Preparing","প্রস্তুত হচ্ছে") }
-            val eta=transfer.remaining?.let { tr("About ","প্রায় ")+if(it<60) "$it s" else "${(it+59)/60} min" }.orEmpty()
-            val rate=if(transfer.speed>0) android.text.format.Formatter.formatFileSize(this,transfer.speed)+"/s" else ""
-            row.addView(label("$percent% · $state · ${transfer.medium} · E2EE",13f))
-            row.addView(label(android.text.format.Formatter.formatFileSize(this,transfer.bytes)+" / "+android.text.format.Formatter.formatFileSize(this,transfer.size)+"  "+rate+"  "+eta,12f))
-            row.addView(ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=1000;progress=if(transfer.size>0) (transfer.bytes*1000/transfer.size).toInt().coerceIn(0,1000) else 0;isIndeterminate=transfer.state=="offered" })
+            row.addView(label(name+" · "+transfer.name,16f))
+            val stateLabel=label("",13f);val statistics=label("",12f)
+            val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=1000;isIndeterminate=transfer.state=="offered" }
+            row.addView(stateLabel);row.addView(statistics);row.addView(progress)
+            sharingProgress[transfer.id]=Triple(stateLabel,statistics,progress)
+            paintSharingProgress(transfer,Triple(stateLabel,statistics,progress),false)
             if(transfer.state=="offered" && !transfer.outgoing) row.addView(button(tr("Accept","গ্রহণ করুন")) {
                 if(transfer.quick && !owner.quickShare.enabled) { quickReceive();return@button }
                 MaterialAlertDialogBuilder(this).setTitle(transfer.name).setMessage(tr("Accept this sender’s files? Quick Share originals save to Downloads/Cute Chat. Subsequent files from this same verified session can receive automatically while receiving stays on (two-minute idle approval). Regular chat files remain private. Keep the connection active. Approved transfers continue under a visible background notification. Pauses expire after ten minutes.","এই sender-এর ফাইল গ্রহণ করবেন? Quick Share ফাইল Downloads/Cute Chat-এ সেভ হবে। গ্রহণ চালু থাকলে একই verified session-এর পরের ফাইল অটোমেটিক আসবে (দুই মিনিট idle approval)। সাধারণ chat file private থাকবে। সংযোগ চালু রাখুন। অনুমোদিত transfer দৃশ্যমান background notification সহ চলবে। দশ মিনিট pause থাকলে বাতিল হবে।"))
@@ -893,6 +898,20 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         if(peers.isEmpty() && owner.localRequests.isEmpty()) list.addView(label(if(internetSharing()) tr("Both accepted contacts must be connected. Ask the receiver to slide Receive; then select their Cute Chat name and ID suffix.","দুই accepted contact সংযুক্ত থাকবেন। অপর ফোনে Receive slide করতে বলুন; তারপর Cute Chat নাম ও ID-এর শেষ অঙ্ক মিলিয়ে বাছুন।") else tr("Slide Send to choose files, or Receive to become visible. Cute Chat users appear after signed identity verification, not by Bluetooth phone names. New contacts must accept on both phones and compare the pairing code.","ফাইল বাছতে Send slide করুন, দৃশ্যমান হতে Receive। Signed পরিচয় যাচাইয়ের পর Cute Chat user দেখাবে, Bluetooth ফোনের নাম নয়। নতুন contact দুটো ফোনে গ্রহণ করবেন ও pairing code মিলিয়ে নেবেন।"),14f))
     }
 
+    private fun refreshSharingProgress() {
+        owner.largeTransfers.forEach { transfer -> sharingProgress[transfer.id]?.let { paintSharingProgress(transfer,it,true) } }
+    }
+    private fun paintSharingProgress(transfer:NativeLargeFiles.View,views:Triple<TextView,TextView,ProgressBar>,animated:Boolean) {
+        val percent=if(transfer.size==0L) if(transfer.state=="done") 100 else 0 else (transfer.bytes*100/transfer.size).toInt().coerceIn(0,if(transfer.state=="done") 100 else 99)
+        val state=if(transfer.paused) tr("Paused","বিরতি") else when(transfer.state) {
+            "offered"->tr("Waiting for acceptance","গ্রহণের অপেক্ষা");"sending"->tr("Sending live","সরাসরি পাঠাচ্ছে");"receiving"->tr("Receiving live","সরাসরি আসছে");"confirming"->tr("Verifying completion","শেষ যাচাই চলছে");"done"->tr("Saved · verified","সেভ হয়েছে · যাচাই সম্পূর্ণ");"failed"->tr("Stopped · select again to retry","থেমেছে · retry করতে আবার বাছুন");else->tr("Preparing","প্রস্তুত হচ্ছে") }
+        val eta=transfer.remaining?.let { tr("About ","প্রায় ")+if(it<60) "$it s" else "${(it+59)/60} min" }.orEmpty()
+        val rate=if(transfer.speed>0) android.text.format.Formatter.formatFileSize(this,transfer.speed)+"/s" else ""
+        views.first.text="$percent% · $state · ${transfer.medium} · E2EE"
+        views.second.text=android.text.format.Formatter.formatFileSize(this,transfer.bytes)+" / "+android.text.format.Formatter.formatFileSize(this,transfer.size)+"  "+rate+"  "+eta
+        val next=if(transfer.size>0) (transfer.bytes*1000/transfer.size).toInt().coerceIn(0,1000) else if(transfer.state=="done") 1000 else 0
+        views.third.setProgress(next,animated)
+    }
     private fun libraryPage(tab: String) {
         page = tab; peer = null; owner.foregroundPeer(null)
         val layout = base(if(tab == "calls") tr("Calls", "কল", "कॉल", "Звонки") else tr("Private media", "প্রাইভেট মিডিয়া", "निजी मीडिया", "Приватная медиатека"))

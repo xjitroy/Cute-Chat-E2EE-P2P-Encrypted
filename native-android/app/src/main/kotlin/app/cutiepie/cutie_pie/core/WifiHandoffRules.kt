@@ -9,14 +9,14 @@ object WifiHandoffRules {
     fun validate(v:JSONObject) {
         val type=v.getString("type")
         NativeIdentity.exact(v,when(type) {
-            "handoff_request" -> setOf("type","id","expiresAt")
+            "handoff_request" -> setOf("type","id","expiresAt") + if(v.has("band5")) setOf("band5") else emptySet()
             "handoff_wifi" -> setOf("type","id","ssid","password","security","port","hosts")
             "handoff_abort" -> setOf("type","id")
             else -> error("Unknown Wi-Fi handoff")
         })
         ProtocolRules.id(v.get("id"))
         when(type) {
-            "handoff_request" -> require(ProtocolRules.integer(v.get("expiresAt"))>=0)
+            "handoff_request" -> { require(ProtocolRules.integer(v.get("expiresAt"))>=0);if(v.has("band5")) require(v.get("band5") is Boolean) }
             "handoff_wifi" -> {
                 val ssid=v.getString("ssid");require(ssid.toByteArray(Charsets.UTF_8).size in 1..32 && ssid.none { Character.isISOControl(it) })
                 val password=v.getString("password");require(password.length in 8..63 && password.all { it.code in 32..126 })
@@ -31,9 +31,10 @@ object WifiHandoffRules {
         val a=value.split('.');if(a.size!=4 || a.any { !it.matches(Regex("[0-9]{1,3}")) || (it.toIntOrNull() ?: -1) !in 0..255 }) return false
         val first=a[0].toInt();return first in 1..223 && first!=127 && !(first==169 && a[1].toInt()==254)
     }
+    fun fastBand(sdk:Int,receiver5GHz:Boolean,sender5GHz:Boolean)=sdk>=36 && receiver5GHz && sender5GHz
     fun fresh(expires:Long,now:Long)=expires>now && expires-now<=SETUP_MS
     /** A fresh ID, peer and role bind every callback; a prior session cannot change current radios. */
-    class Gate(val peer:String,val id:String,val host:Boolean,val began:Long) {
+    class Gate(val peer:String,val id:String,val host:Boolean,val began:Long,val prefer5GHz:Boolean=false) {
         var phase=if(host) "offered" else "requested";private set
         fun accept(from:String,session:String,now:Long):Boolean {
             if(!host || phase!="offered" || !matches(from,session) || now-began>=SETUP_MS) return false

@@ -4,6 +4,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class FileTransferFlowTest {
+    @Test fun burstyTinyRecordsDoNotPretendEachRecordIsANewNetworkSpeedSample() {
+        val rate=FileTransferRate();rate.note(0,1)
+        repeat(8) { i -> rate.note((i+1)*32768L,1+(i+1)*1_000_000L) }
+        assertEquals(0L,rate.speed(8_000_001))
+        rate.note(524288,500_000_001)
+        assertEquals(1_048_576L,rate.speed(500_000_001))
+    }
+    @Test fun duplicateProgressDoesNotKeepAnIdleRateAlive() {
+        val rate=FileTransferRate();rate.note(0,1);rate.note(1024,1_000_000_001)
+        rate.note(1024,5_000_000_001)
+        assertEquals(0L,rate.speed(6_000_000_002))
+    }
     @Test fun oneSideCannotResumeTheOtherSidesPauseAndOldControlsDoNotReplay() {
         val flow=FileTransferFlow();assertEquals(1L,flow.local(true,100))
         assertTrue(flow.received(true,1,200));assertEquals(2L,flow.local(false,300));assertTrue(flow.paused());assertFalse(flow.locallyPaused())

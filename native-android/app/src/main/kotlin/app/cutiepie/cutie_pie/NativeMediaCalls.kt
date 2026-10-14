@@ -221,6 +221,7 @@ class NativeMediaCalls(private val app: CutieApplication, private val owner: Nat
             if (active) {
                 preparePending()
                 if(bluetoothCall && status=="connected" && (peer !in owner.connected || SystemClock.elapsedRealtime()-bluetoothAudioAt>10_000)) { failed("bluetooth_audio_link_lost");return@scheduleWithFixedDelay }
+                if(video) refreshRemoteVideo()
                 if(video && capturer != null) updateVideoProtection()
                 if(screenSharing) updateScreenGeometry()
                 drainCallSignals()
@@ -414,6 +415,7 @@ class NativeMediaCalls(private val app: CutieApplication, private val owner: Nat
             PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer())
         val config = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+            continualGatheringPolicy=PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
         }
         rtc = checkNotNull(factory!!.createPeerConnection(config, object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState) {}
@@ -442,7 +444,13 @@ class NativeMediaCalls(private val app: CutieApplication, private val owner: Nat
             override fun onDataChannel(channel: DataChannel) { channel.close(); channel.dispose() }
             override fun onRenegotiationNeeded() {}
             override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) = dispatch(token) {
-                (receiver.track() as? VideoTrack)?.let { remoteVideo = it; changed() }
+                receivedVideo(receiver.track())
+            }
+            override fun onTrack(transceiver: RtpTransceiver) = dispatch(token) {
+                receivedVideo(transceiver.receiver.track())
+            }
+            override fun onRemoveTrack(receiver: RtpReceiver) = dispatch(token) {
+                if(remoteVideo===receiver.track()) { remoteVideo=null;changed() }
             }
         }))
         audioSource = factory!!.createAudioSource(MediaConstraints())
@@ -469,6 +477,14 @@ class NativeMediaCalls(private val app: CutieApplication, private val owner: Nat
         }
         updateProximity()
     }
+    private fun receivedVideo(track: MediaStreamTrack?) {
+        val next=track as? VideoTrack ?: return
+        if(remoteVideo!==next) { remoteVideo=next;changed() }
+    }
+    private fun refreshRemoteVideo() {
+        if(!active || !video || remoteVideo!=null) return
+        rtc?.receivers?.forEach { receivedVideo(it.track()) }
+    }
     private fun local(description: SessionDescription, kind: String) {
         preparationStage="encrypted_media_negotiation"
         val token = id
@@ -482,7 +498,7 @@ class NativeMediaCalls(private val app: CutieApplication, private val owner: Nat
     }
     private fun setRemote(type: SessionDescription.Type, sdp: String, then: () -> Unit) {
         rtc!!.setRemoteDescription(observer(id, set = {
-            remoteSet = true; while (incomingIce.isNotEmpty()) try { rtc!!.addIceCandidate(incomingIce.removeFirst()) } catch (_: Exception) { }
+            remoteSet = true; refreshRemoteVideo(); while (incomingIce.isNotEmpty()) try { rtc!!.addIceCandidate(incomingIce.removeFirst()) } catch (_: Exception) { }
             then()
         }), SessionDescription(type, sdp))
     }
@@ -638,7 +654,8 @@ class NativeMediaCalls(private val app: CutieApplication, private val owner: Nat
                 .filter { it in decoders && hardwareRateSupported(VideoQualityPolicy.Preset(captureWidth,captureHeight,captureFps),it) &&
                     hardwareRateSupported(recoveryTarget,it) && hardwareCodecFit(recoveryTarget,it,false) }.toSet()
             val codecs=factory!!.getRtpSenderCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO).codecs
-                .sortedBy { VideoCompressionPolicy.codecRank(it.name,it.parameters,hardware) }
+                .sortedBy { if(owner.transport(peer)=="wifi") VideoCompressionPolicy.localCodecRank(it.name,it.parameters,hardware)
+                    else VideoCompressionPolicy.codecRank(it.name,it.parameters,hardware) }
             // Generate compatible SDP via the SDK; never rewrite fingerprints or SRTP.
             rtc!!.transceivers.filter { it.mediaType==MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO }.forEach {
                 if(it.setCodecPreferences(codecs).isError) videoNotice="Default compatible codec negotiation retained"

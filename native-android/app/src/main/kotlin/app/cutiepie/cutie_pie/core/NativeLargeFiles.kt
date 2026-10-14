@@ -24,6 +24,7 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
         var liveReader:LiveSecretFileStream.Reader?=null;var liveWriter:LiveSecretFileStream.Writer?=null;var open:(()->InputStream)?=null
         val live get()=meta.optString("type")=="stream_offer"
         val progressPending=AtomicBoolean(false);@Volatile var reported=0L
+        val progressLock=java.lang.Object()
         @Volatile var updated=System.nanoTime();var notified=0L
         var quick:NativeQuickShare.Destination?=null;var done:(Boolean)->Unit={};val completedCallback=AtomicBoolean(false);var output:FileOutputStream?=null;var writer:DataOutputStream?=null;var reader:SecretFileStream.Reader?=null
     }
@@ -65,14 +66,26 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
     }
     private fun note(job:Job,bytes:Long) {
         job.bytes=bytes;job.updated=System.nanoTime();job.rate.note(bytes,job.updated)
-        if(job.live && !job.outgoing && (bytes-job.reported>=64*1024 || bytes==job.meta.getLong("size")) && job.progressPending.compareAndSet(false,true)) owner.execute {
-            try { if(!job.stopped.get() && job.state in setOf("receiving","confirming","done") && link(job.peer)===job.channel) {
-                job.reported=job.bytes;control(job.peer,JSONObject().put("type","stream_progress").put("id",job.id).put("bytes",job.bytes))
-            } } finally { job.progressPending.set(false) }
-        }
+        if(job.live && !job.outgoing && (bytes-job.reported>=FileTransferTuning.ACK_MIN_BYTES || bytes==job.meta.getLong("size"))) reportProgress(job)
         if(job.updated-job.notified>1_000_000_000) {
             job.notified=job.updated;owner.execute { if(!job.stopped.get()) { activity(job.peer);if(!job.outgoing && job.meta.optBoolean("quick")) quickConsent.progress(job.peer,job.channel.requestId,quickEpoch(),android.os.SystemClock.elapsedRealtime());snapshot() } }
         }
+    }
+    private fun reportProgress(job:Job) {
+        if(!job.progressPending.compareAndSet(false,true)) return
+        owner.schedule({
+            try {
+                if(!job.stopped.get() && job.state in setOf("receiving","confirming","done") && link(job.peer)===job.channel) {
+                    val bytes=job.bytes
+                    control(job.peer,JSONObject().put("type","stream_progress").put("id",job.id).put("bytes",bytes))
+                    job.reported=bytes
+                }
+            } catch(_:IllegalStateException) { /* Retry a coalesced checkpoint if the bounded control outbox is busy. */ }
+            finally {
+                job.progressPending.set(false)
+                if(!job.stopped.get() && job.state in setOf("receiving","confirming") && job.bytes>job.reported) reportProgress(job)
+            }
+        },FileTransferTuning.PROGRESS_DELAY_MS,java.util.concurrent.TimeUnit.MILLISECONDS)
     }
     private fun visible(job:Job)=JSONObject().put("id",job.id).put("name",job.meta.getString("name")).put("mime",job.meta.getString("mime"))
         .put("size",job.meta.getLong("size")).put("large",true)
@@ -103,6 +116,8 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
         val job=jobs[id] ?: return
         check(job.live && job.state in setOf("sending","receiving") && !job.stopped.get())
         val seq=job.flow.local(paused,android.os.SystemClock.elapsedRealtime())
+        job.updated=System.nanoTime()
+        synchronized(job.progressLock) { job.progressLock.notifyAll() }
         control(job.peer,JSONObject().put("type","stream_pause").put("id",id).put("paused",paused).put("seq",seq));snapshot()
     }
     private fun awaitFlow(job:Job):Boolean {
@@ -114,12 +129,17 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
         try {
             writer.use { output -> checkNotNull(job.open).invoke().buffered(LargeFileRules.CHUNK).use { input -> output.stream(input,{ cipher,count,final ->
                 check(awaitFlow(job))
-                val until=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(30)
-                while(count-job.bytes>128*1024 && !job.stopped.get() && job.channel.ready && System.nanoTime()<until) { check(awaitFlow(job));Thread.sleep(5) }
-                check(count-job.bytes<=128*1024 && !job.stopped.get());job.sentBytes=count;if(final) job.finalSent=true
+                var acknowledged=job.bytes;var idleAt=System.nanoTime()
+                while(!FileTransferTuning.canAdvance(count,job.bytes,job.channel.medium,inCall())) {
+                    val paused=job.flow.paused();check(awaitFlow(job))
+                    if(paused || job.bytes>acknowledged) { acknowledged=job.bytes;idleAt=System.nanoTime() }
+                    check(System.nanoTime()-idleAt<FileTransferTuning.ACK_IDLE_NS) { "Recipient progress stalled" }
+                    synchronized(job.progressLock) { if(!FileTransferTuning.canAdvance(count,job.bytes,job.channel.medium,inCall()) && !job.stopped.get()) job.progressLock.wait(100) }
+                }
+                check(!job.stopped.get());job.sentBytes=count;if(final) job.finalSent=true
                 check(job.channel.sendBinary(job.id,cipher) { !job.stopped.get() })
                 job.updated=System.nanoTime()
-                if(inCall()) Thread.sleep(35)
+                // A smaller in-call window preserves headroom; no35ms sleep per32KiB record.
             },{ awaitFlow(job) }) } }
             owner.execute { if(job.state=="sending" && !job.stopped.get()) { job.state="confirming";job.updated=System.nanoTime();snapshot() } }
         } catch(_:Exception) { owner.execute { fail(job,true) } } finally { job.open=null }
@@ -171,7 +191,9 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
                 };if(job.completedCallback.compareAndSet(false,true)) job.done(true);snapshot()
             }
             "stream_progress" -> jobs[id]?.takeIf { it.live && it.peer==peer && it.channel===channel && it.outgoing && it.state in setOf("sending","confirming") && !it.stopped.get() }?.let { job ->
-                val bytes=value.getLong("bytes");check(bytes<=job.sentBytes);if(bytes>=job.bytes) note(job,bytes)
+                val bytes=value.getLong("bytes");check(bytes<=job.sentBytes);if(bytes>=job.bytes) {
+                    note(job,bytes);synchronized(job.progressLock) { job.progressLock.notifyAll() }
+                }
             }
             "stream_pause" -> jobs[id]?.takeIf { it.live && it.peer==peer && it.channel===channel && it.state in setOf("sending","receiving","confirming") && !it.stopped.get() }?.let { job ->
                 if(job.flow.received(value.getBoolean("paused"),value.getLong("seq"),android.os.SystemClock.elapsedRealtime())) { job.updated=System.nanoTime();snapshot() }
@@ -192,7 +214,7 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
         try {
             synchronized(job) {
                 if(job.live) job.liveReader=liveCrypto.Reader(id,job.meta.getLong("size"),key,header) else job.reader=crypto.Reader(id,job.meta.getLong("size"),key,header,job.meta.getString("hash"))
-                if(job.quick==null) { job.output=FileOutputStream(file(id,true));job.writer=DataOutputStream(job.output!!) };job.state="receiving";job.updated=System.nanoTime()
+                if(job.quick==null) { job.output=FileOutputStream(file(id,true));job.writer=DataOutputStream(BufferedOutputStream(job.output!!,FileTransferTuning.STREAM_BUFFER)) };job.state="receiving";job.updated=System.nanoTime()
             }
             if(userApproved && job.meta.getBoolean("quick")) quickConsent.approve(job.peer,job.channel.requestId,quickEpoch(),android.os.SystemClock.elapsedRealtime())
             control(job.peer,JSONObject().put("type",type(job,"accept")).put("id",id));activity(job.peer);snapshot()
@@ -219,9 +241,16 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
                                 vault.transaction { tx ->
                                     tx.execute("INSERT INTO messages(id,peer,outgoing,kind,data,created_at,status) VALUES(?,?,0,'text',?,?,2)",job.id,peer,JSONObject().put("text","Quick Share · "+job.meta.getString("name")+" · Saved to your selected folder").toString(),System.currentTimeMillis())
                                 }
-                            } else completed(job)
-                            job.state="done";job.meta.remove("key");job.meta.remove("header");snapshot();control(peer,JSONObject().put("type",type(job,"done")).put("id",id));available(peer,id,job.meta.getString("mime"),job.meta.getString("name")) }
-                        catch(_:Exception) { fail(job,true) }
+                            } else {
+                                completed(job)
+                            }
+                            job.state="done"
+                            job.meta.remove("key")
+                            job.meta.remove("header")
+                            snapshot()
+                            control(peer,JSONObject().put("type",type(job,"done")).put("id",id))
+                            available(peer,id,job.meta.getString("mime"),job.meta.getString("name"))
+                        } catch(_:Exception) { fail(job,true) }
                     }
                 }
             }
@@ -232,13 +261,13 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
     }
     private fun transmit(job:Job) {
         try {
-            DataInputStream(FileInputStream(file(job.id))).use { input ->
+            DataInputStream(BufferedInputStream(FileInputStream(file(job.id)),FileTransferTuning.STREAM_BUFFER)).use { input ->
                 var bytes=0L
                 while(!job.stopped.get()) {
                     val cipher=LargeFileRules.read(input)
                     try { check(job.channel.sendBinary(job.id,cipher) { !job.stopped.get() });bytes+=cipher.size-LargeFileRules.OVERHEAD;note(job,bytes) } finally { cipher.fill(0) }
                     if(bytes==job.meta.getLong("size") && input.available()==0) break
-                    if(inCall()) Thread.sleep(35) // Preserve media headroom during a concurrent call.
+                    if(inCall()) Thread.sleep(2) // Preserve modest media headroom without a sub1MiB/s ceiling.
                 }
                 check(!job.stopped.get() && bytes==job.meta.getLong("size"));check(input.read()==-1)
             }
@@ -249,6 +278,7 @@ class NativeLargeFiles(context:Context,private val vault:TransactionalVault,priv
     fun disconnected(peer:String) { quickConsent.disconnected(peer);jobs.values.filter { it.peer==peer && it.state!="done" }.forEach { fail(it,false) } }
     private fun fail(job:Job,notify:Boolean) {
         if(job.state=="done" || !job.stopped.compareAndSet(false,true)) return
+        synchronized(job.progressLock) { job.progressLock.notifyAll() }
         if(!job.outgoing) discard.add(job.peer,job.channel.requestId,job.id)
         synchronized(job) { runCatching { job.quick?.finish(false) };job.quick=null;runCatching { job.writer?.close() };job.writer=null;job.reader?.close();job.reader=null;job.liveReader?.close();job.liveReader=null;job.liveWriter?.close();job.liveWriter=null;job.open=null }
         file(job.id,true).delete();job.state="failed"
