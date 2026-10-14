@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent></queries>
+    <application>
+        <activity android:name=".RemoteConsentActivity" android:exported="false" android:excludeFromRecents="true" />
+        <activity android:name=".RemoteControlActivity" android:exported="false" android:excludeFromRecents="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" />
+        <service android:name=".RemoteControlService" android:label="Cute Chat remote assistance" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/remote_assistance" />
+        </service>
+    </application>
+</manifest>
