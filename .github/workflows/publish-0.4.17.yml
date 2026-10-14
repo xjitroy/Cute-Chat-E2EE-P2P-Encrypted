@@ -1,0 +1,43 @@
+name: One-time verified Cute Chat0.4.17 asset upload
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: publish-cute-chat-0.4.17
+  cancel-in-progress: false
+jobs:
+  upload:
+    if: github.repository == 'xjitroy/Cute-Chat-E2EE-P2P-Encrypted'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify pinned public artifacts and fill only the authorized draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,subprocess,urllib.request
+          from datetime import datetime,timezone
+          from pathlib import Path
+          assert datetime.now(timezone.utc)<datetime.fromisoformat('2026-10-14T15:28:05.857526+00:00'), 'One-time publication window expired'
+          repo='xjitroy/Cute-Chat-E2EE-P2P-Encrypted'
+          tag='cute-chat-0.4.17'
+          commit='e00aba3f8227cc85e082175092ad8bd1d8cd89d8'
+          files=[{'name': 'CHECKSUMS.sha256', 'bytes': 589, 'sha256': '563aa367580842689a9f4e7da6a6d8194620a987f181fdd10a0fdddf688b3f09'}, {'name': 'Cute-Chat-0.4.17-Source.zip', 'bytes': 1347633, 'sha256': '882e1ecc392f34663cbfc14534716ef0d020007765d0ca4e0b1c8ddd65a93181'}, {'name': 'Cute-Chat-0.4.17-normal.apk', 'bytes': 79652368, 'sha256': 'cac78235fac549e98c8ad3066a78145aa8e9346e4161759b49c197e43b0d8fc1'}, {'name': 'PRIVACY.md', 'bytes': 1347, 'sha256': 'c701a6edea7c09412936e7d272791dd92328b0aa949a584b5683b1947d476506'}, {'name': 'README.md', 'bytes': 10884, 'sha256': '1c7ad41b917b70acf9c37106083cb0535675bf3d3b7dd67a09b502b89ddd28c4'}, {'name': 'SECURITY.md', 'bytes': 1838, 'sha256': 'dc630bb43e1f1f8c0ac5004072806f46c520d13f76ecb2b3c4b31d9e5a3de65d'}, {'name': 'VALIDATION.json', 'bytes': 1576, 'sha256': '695c9f27b0261b55144476aa89e870cc4ac05464b340e766a6f17ed2d4167b4e'}, {'name': 'cute-chat-update.json', 'bytes': 367, 'sha256': 'b6c42192e2a94cf573c282f58aead4c0e0f2601fa312b58086723a6b75e1ca6c'}]
+          release=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/releases/412748356'],text=True))
+          assert release['id']==412748356 and release['tag_name']==tag and release['draft'] is True and release['prerelease'] is False, 'Only the exact authorized unpublished draft may be populated'
+          folder=Path('release-assets');folder.mkdir()
+          for f in files:
+           url=f"https://raw.githubusercontent.com/{repo}/{commit}/App/0.4.17/{f['name']}"
+           path=folder/f['name'];digest=hashlib.sha256();size=0
+           with urllib.request.urlopen(url,timeout=90) as response,path.open('wb') as output:
+            while True:
+             chunk=response.read(1024*1024)
+             if not chunk:break
+             size+=len(chunk);assert size<=f['bytes'];digest.update(chunk);output.write(chunk)
+           assert size==f['bytes'] and digest.hexdigest()==f['sha256'],f['name']
+           subprocess.run(['gh','release','upload',tag,'--repo',repo,str(path),'--clobber'],check=True)
+           print(f"Verified and uploaded {f['name']}: {size} bytes",flush=True)
+          print('Exact eight verified assets uploaded; no release publication or other repository writes performed.')
+          PY
