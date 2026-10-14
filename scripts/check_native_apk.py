@@ -54,7 +54,7 @@ if bad:
     raise SystemExit(f"Forbidden broad permissions: {sorted(bad)}")
 
 badging = subprocess.check_output([str(aapt), "dump", "badging", str(apk)], text=True)
-version_match = re.search(r"package: name='app\.cutiepie\.cutie_pie' versionCode='36' versionName='0\.4\.15-(normal|assist)(-debug)?'", badging)
+version_match = re.search(r"package: name='app\.cutiepie\.cutie_pie' versionCode='37' versionName='0\.4\.16-(normal|assist)(-debug)?'", badging)
 if not version_match:
     raise SystemExit("Unexpected package or version")
 

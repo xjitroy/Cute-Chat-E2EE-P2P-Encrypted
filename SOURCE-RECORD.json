@@ -1,11 +1,11 @@
 {
-  "source_commit": "7776750314810b93d1080258804370de88708b23",
-  "compiled_native_source_commit": "5264ce257b3c9cea1a4f24ee4edb6a2659dfe15d",
+  "source_commit": "4e9b9376531c2d802b3ec96dc1444b7ad0019d51",
+  "compiled_native_source_commit": "4e9b9376531c2d802b3ec96dc1444b7ad0019d51",
   "native_files": {
     "native-android/.gitignore": "084461057a2b607f56175a599f2e099843be0ecc2dcf0c00d9b367015e004a2d",
     "native-android/README.md": "6512fbc8a0d7a044dd37a5e8b89582fd1a755228a25aae8a3b340e186b01918e",
-    "native-android/app/build.gradle.kts": "b9c0d2956d6d88b1a33617a52b350190b5707ad06ab059714022f6c190f20281",
-    "native-android/app/src/androidTest/kotlin/app/cutiepie/cutie_pie/AppUpdateAndroidTest.kt": "fb3be9b19043fa8c5b868895c1fed8d382448b4b7aea15736ddb54dda4ffd4a1",
+    "native-android/app/build.gradle.kts": "7ee80954c9800c106136cd7ba5c63c16ec58bb6e782d5c4997a8003f67e0af4b",
+    "native-android/app/src/androidTest/kotlin/app/cutiepie/cutie_pie/AppUpdateAndroidTest.kt": "40f1fe86e36f321f5e140163eeaaa6ebe405eceb23be5aaee55a0559c262613d",
     "native-android/app/src/androidTest/kotlin/app/cutiepie/cutie_pie/CameraCaptureTest.kt": "261154c96f735408e55b418e6ad00da30f44eb9e475e01c14c537bcb639bc1fb",
     "native-android/app/src/androidTest/kotlin/app/cutiepie/cutie_pie/LauncherFlowTest.kt": "c1720a98f26368fa7bd710de1c868a29b617d7e258c16fb35115dbd8e727e21f",
     "native-android/app/src/androidTest/kotlin/app/cutiepie/cutie_pie/NativeTestUnlock.kt": "59d4a111a7055d01b11a6dc3de5ac74e5c6816ad5ab157b0deaf915449b8fd8c",
@@ -26,7 +26,7 @@
     "native-android/app/src/assist/kotlin/app/cutiepie/cutie_pie/RemoteControlService.kt": "4d6c1aed9f3dad2ead38dc70c65b1cbb9670651994bfd2a08f5728ace4376c58",
     "native-android/app/src/assist/res/values/remote_assistance.xml": "76866009a49a1bac9969a4f67d4e9c30d5030daa42a6b810ed5974fcfc282fc2",
     "native-android/app/src/assist/res/xml/remote_assistance.xml": "950155dc0ec28843293b758ecc64fea07b774c631d0ea3d040e03066446e2bdf",
-    "native-android/app/src/main/AndroidManifest.xml": "350e522ed972bf9b00643f2d72f24ba5b719590a96e8179ba0e80a76da2e6786",
+    "native-android/app/src/main/AndroidManifest.xml": "a01ea6afb3770973628ecbab104341bc163132c0b995019a1c4a101a76a5a531",
     "native-android/app/src/main/assets/firebase-public.json": "48bc7704e1f278820f906c592b45583739fbd1d6052e1ce5d2547af303bfdfcd",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/ChatCameraActivity.kt": "2d33678c7f62d9089f9b6a48f6ec89684012aca08323cd181110d5ee77bb2821",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/ConnectionService.kt": "2bc0a3ce8428c3c13678bb7b8a539b24bedbc8db2bd0f526ee09e3bbc69dbdd0",
@@ -39,7 +39,7 @@
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/LimitedVideoView.kt": "5c8afcdc11865e53721122f45eb11d1864083041e40b7fe10a591674c37a4ce4",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/MainActivity.kt": "9e0a40a04c763f8741eaeac9d159cc01a42f4fc2889952db09b7b1ee8422b801",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/MaterialYou.kt": "e40925ef807ef7816f06fddab5e2e8806fc590000fe52b42f7758c5d8eb7a5e2",
-    "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeAppUpdates.kt": "de0b4ba69886c79b39c00642af0477f36dcb0ac0a699ab89635ac18eccf04969",
+    "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeAppUpdates.kt": "8bde57861b282c2206bf313ac51b14fee96bf930bc7806cf24c84c7ce254a7c1",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeBluetoothSpeech.kt": "28642d58ea9655a843849282ce132153398d9962faa86b06e25568a8a141c4c5",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeCalls.kt": "50498a5592bf305144435f2c9491a437dc4725c8f18e830908f40be66d981771",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeMediaCalls.kt": "be8a6deba596f640989daa541cd9135dd39d190f2fb240640bd5a72ee3a7ad5c",
@@ -47,6 +47,7 @@
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeQrScanner.kt": "3918a2fd789488afeb2c370aaa246e8d67f29cc16aff501f9e707aef532f0320",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeQuickShare.kt": "af9551bd09f43c79eb550959181f17937a41444702e685d2b20ff7a247b8d80c",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeRtcNetworks.kt": "2b6d5637c606585e086a5f91a2db9c66232c61761c0eebeaaa17ae739e391550",
+    "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/NativeUpdateInstaller.kt": "8551a4855074a906868a4b1711b2349aeef6f95c75d335f385045900e9d0dbd8",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/PhoneContacts.kt": "726b94034a8f56f6c88e98606c4868ebeda38fdf841208d4461c9c15363d3d2a",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/PrivateAlerts.kt": "04a31c143cbfea7643ab5766406fe67fd34b924596d141a1ba65a330ba9b234d",
     "native-android/app/src/main/kotlin/app/cutiepie/cutie_pie/PrivateDocumentActivity.kt": "d4d37adaf8ce867726f16b6d66c9ff4ced6875e2c80f2fc760c5b48398c5bcb9",
@@ -189,9 +190,9 @@
     "native-android/gradlew": "ec56c02543666d92d9ac5ae7fcc48f88ce4de0deb8b7f9b39928ca46f68c1b2b",
     "native-android/settings.gradle.kts": "09df385d9b56500bad39ad2bf18313e9cb150639792eae715ef84687cd49fb82"
   },
-  "public_publication": "AUTHORIZED_BY_OWNER_2026-10-14",
   "documentation_only_changes": [
     "native-android/README.md"
   ],
-  "runtime_source_unchanged": true
+  "runtime_source_unchanged": true,
+  "public_publication": "Owner designated public Normal/source repair scope"
 }

@@ -1,0 +1,53 @@
+{
+  "version": "0.4.16",
+  "versionCode": 37,
+  "source_commit": "4e9b9376531c2d802b3ec96dc1444b7ad0019d51",
+  "compiled_native_source_commit": "4e9b9376531c2d802b3ec96dc1444b7ad0019d51",
+  "checks": {
+    "normal": {
+      "jvm": {
+        "tests": 208,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "lint": {
+        "Error": 0,
+        "Warning": 125
+      },
+      "compiled_instrumentation_cases": 24,
+      "instrumentation_executed": 0,
+      "instrumentation_apk_sha256": "33ee5748de84e8c588d3e101857208ea679e1ee23a3d23ede83ca1a914582161"
+    },
+    "assist": {
+      "jvm": {
+        "tests": 208,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "lint": {
+        "Error": 0,
+        "Warning": 137
+      },
+      "compiled_instrumentation_cases": 24,
+      "instrumentation_executed": 0,
+      "instrumentation_apk_sha256": "1d3e868109c460d2e4adae57393e1e979da559747eb2121030f3623c505ab41c"
+    }
+  },
+  "apk": {
+    "variant": "normal",
+    "name": "Cute-Chat-0.4.16-normal.apk",
+    "bytes": 79635984,
+    "sha256": "3875590ae2c19188cf2da4be2cef4fa3a8e74beba4690f342b1845baec9d4847"
+  },
+  "signer_sha256": "36977d12a524211451eb0f228405622552923d6dd62dac3309e886e7f3ff4a55",
+  "native_files_verified_against_frozen_source": 186,
+  "native_documentation_only_changes": [
+    "native-android/README.md"
+  ],
+  "physical_tests": "NOT_RUN; no adb target; exact OEM failure not captured",
+  "development_signed": true,
+  "play_approval": "NOT_CLAIMED",
+  "independent_security_audit": "NOT_PERFORMED"
+}

@@ -1,6 +1,5 @@
 package app.cutiepie.cutie_pie
 
-import android.content.ClipData
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
@@ -17,7 +16,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.content.FileProvider
 import app.cutiepie.cutie_pie.core.AppUpdateRules
 import app.cutiepie.cutie_pie.core.AppUpdateDownload
 import com.google.android.material.snackbar.Snackbar
@@ -60,11 +58,25 @@ internal class NativeAppUpdates(private val activity: MainActivity, private val 
     private var bannerText: TextView? = null
     private val folder get() = File(activity.filesDir,"app-updates")
     private val variant get() = if(BuildConfig.REMOTE_CONTROL) "assist" else "normal"
+    init { NativeUpdateInstaller.changed = { handler.post { foreground() } } }
     private fun text(en: String, bn: String, hi: String = en, ru: String = en) = activity.tr(en,bn,hi,ru)
     private fun notify(message: String) { if(allowed() && !closed) Toast.makeText(activity,message,Toast.LENGTH_LONG).show() }
 
     fun foreground() {
         if(closed || !allowed()) return
+        NativeUpdateInstaller.takeResult(activity)?.let { status ->
+            installerOpened=false
+            if(status != android.content.pm.PackageInstaller.STATUS_SUCCESS) {
+                returnedInstaller=false;dismissed=false
+                notify(text("Android did not install the update. You can retry from App updates or download the APK from GitHub.","Android আপডেট ইনস্টল করেনি। App updates থেকে আবার চেষ্টা করুন অথবা GitHub থেকে APK ডাউনলোড করুন।"))
+            }
+        }
+        NativeUpdateInstaller.takeConfirmation(activity)?.let { confirmation ->
+            installerOpened=true
+            try { activity.startActivityForResult(confirmation,INSTALL) }
+            catch(_: Exception) { installerOpened=false;notify(text("Android could not open installation confirmation. Retry from App updates.","Android ইনস্টলের অনুমতি দেখাতে পারেনি। App updates থেকে আবার চেষ্টা করুন।")) }
+            return
+        }
         if(returnedInstaller) { returnedInstaller=false;entered=true;dismissed=true;return }
         if(waitingSettings && returnedSettings) {
             waitingSettings=false;returnedSettings=false
@@ -268,24 +280,21 @@ internal class NativeAppUpdates(private val activity: MainActivity, private val 
                 file.inputStream().use { input -> val buffer=ByteArray(65536);while(true) { val n=input.read(buffer);if(n<0) break;digest.update(buffer,0,n) } }
                 require(AppUpdateRules.digestMatches(digest.digest(),update.sha256));verifyArchive(file,update)
             }.isSuccess
+            val staged = valid && runCatching {
+                NativeUpdateInstaller.stage(activity.applicationContext,file,update) { closed }
+            }.isSuccess
             handler.post {
                 if(closed) return@post
                 if(!valid) { installerOpened=false;ready=null;file.delete();notify(text("Update verification failed","আপডেট যাচাই ব্যর্থ"));render();return@post }
+                if(!staged) { installerOpened=false;notify(text("Android could not prepare installation. Check free storage and retry from App updates.","Android ইনস্টল প্রস্তুত করতে পারেনি। খালি storage দেখুন এবং App updates থেকে আবার চেষ্টা করুন।"));render();return@post }
                 if(!allowed()) { installerOpened=false;return@post }
-                try {
-                    val uri=FileProvider.getUriForFile(activity,"${activity.packageName}.updates",file)
-                    activity.startActivityForResult(Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                        setDataAndType(uri,"application/vnd.android.package-archive")
-                        clipData=ClipData.newRawUri("Cute Chat update",uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        putExtra(Intent.EXTRA_RETURN_RESULT,true)
-                    },INSTALL)
-                } catch(_: Exception) { installerOpened=false;notify(text("Android could not open the installer","Android installer খোলা যায়নি"));render() }
+                foreground()
             }
         }
     }
     override fun close() {
         closed=true;++transfer;activeCall?.cancel();snackbar?.dismiss();handler.removeCallbacksAndMessages(null);io.shutdownNow()
+        NativeUpdateInstaller.changed=null
         // Do not remove a verified APK while Android's installer may still be reading its URI.
         http.connectionPool.evictAll()
     }

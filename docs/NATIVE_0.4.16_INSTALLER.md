@@ -1,0 +1,13 @@
+# Cute Chat 0.4.16 — Android updater installation repair
+
+Owner reports Android package-parse error when installing from the in-app updater, after trying Chrome. Published 0.4.15 bytes/hash and v2/v3 signature verify; the exact device rejection has not been captured. Do not call the OEM root cause proven or claim on-phone installation passed.
+
+After the same strict archive/package/version/capability/non-debuggable/current-signer and size/SHA-256 checks, use the public PackageInstaller full-install Session API instead of passing an app-private FileProvider URI to OEM install Activities. Stream the original APK into Android-owned base.apk with bounded 64 KiB buffers and exact hash/length verification, fsync before commit, abandon incomplete/failed sessions. Android owns bytes independently of source Activity/file URI. API31+ explicitly requires user action; install-source permission and final Android/Play Protect consent remain mandatory. No new permission, silent installation, global storage export, signing/crypto/vault change or backend update.
+
+Callbacks use an explicit non-exported BroadcastReceiver and per-session unpredictable token/ID/elapsed-time binding, mutable PendingIntent only because Android must insert result extras. Stale, forged, expired callbacks are ignored. A foreground authenticated view may show Android's confirmation; background only posts an optional generic tap-to-confirm notification, never silently opens a screen/unlocks the app. Final failures remain retryable, and are not reported as installation success. Verified source files remain available while Android handles consent.
+
+Instrumentation adds non-exported callback verification and real Android session round-trip copy/hash proof without committing/installing or bypassing app authentication. Compiled cases are separate from executed device tests. Existing 208 JVM tests verify updater policy and bounded download corruption/size/cancel checks. No attached device/emulator was available in the last release; actual permission/consent/cancel/install/error callbacks must still be tested on Android10+/16.
+
+Important bootstrap: changing a new APK cannot repair installer code already running on an older phone. Install the new Normal APK once from Chrome/Downloads over the current app (no uninstall or data clear); subsequent updates use the new session route. If Chrome itself rejects the APK, collect exact Android error/version and diagnose platform policy, ABI, disk and signer rather than bypass protection.
+
+Public Normal/source updates remain in the owner's designated Cute-Chat-E2EE-P2P-Encrypted product repository. Debug/development history remain private. Source/build/download/physical evidence must be recorded honestly. Production Worker unchanged.
